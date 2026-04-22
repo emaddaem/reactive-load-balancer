@@ -1,0 +1,14 @@
+server:
+  port: 8080
+
+loadbalancer:
+  health:
+    check:
+      interval: 10000
+      timeout: 3000
+  failure:
+    threshold: 3
+  proxy:
+    timeout: 5000
+  algorithm:
+    default: ROUND_ROBIN
