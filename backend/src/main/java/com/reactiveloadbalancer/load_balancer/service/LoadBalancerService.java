@@ -23,6 +23,8 @@ public class LoadBalancerService {
             .filter(s -> s.getName().equals(properties.getAlgorithm().getDefaultAlgorithm()))
             .findFirst()
             .orElseThrow(() -> new IllegalArgumentException("Unknown default strategy: " + properties.getAlgorithm().getDefaultAlgorithm()));
+        
+        log.info("LoadBalancerService initialized with strategy: {}", activeStrategy.getName());
     }
 
     public Optional<BackendServer> getNextServer() {
