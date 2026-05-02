@@ -2,15 +2,16 @@ package com.reactiveloadbalancer.load_balancer.controller;
 
 import com.reactiveloadbalancer.load_balancer.model.BackendServer;
 import com.reactiveloadbalancer.load_balancer.service.LoadBalancerService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
+import jakarta.validation.Valid;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -51,27 +52,23 @@ public class ServerController {
     }
 
     @GetMapping("/config/strategy")
-    public Mono<Map<String, Object>> getStrategy() {
-        return Mono.just(Map.of(
-                "active", loadBalancerService.getActiveStrategyName(),
-                "available", loadBalancerService.getAvailableStrategies()
+    public Mono<StrategyResponse> getStrategy() {
+        return Mono.just(new StrategyResponse(
+                loadBalancerService.getActiveStrategyName(),
+                loadBalancerService.getAvailableStrategies()
         ));
     }
 
     @PatchMapping("/config/strategy")
-    public Mono<ResponseEntity<Map<String, String>>> setStrategy(@RequestBody Map<String, String> body) {
-        String name = body.get("strategy");
-        if (name == null || name.isBlank()) {
-            return Mono.just(ResponseEntity.badRequest()
-                    .body(Map.of("error", "Missing 'strategy' field")));
-        }
+    public Mono<ResponseEntity<SetStrategyResponse>> setStrategy(@Valid @RequestBody SetStrategyRequest request)
+    {
         try {
-            loadBalancerService.setStrategyByName(name);
-            log.info("Strategy switched via API to: {}", name);
-            return Mono.just(ResponseEntity.ok(Map.of("active", name)));
+            loadBalancerService.setStrategyByName(request.strategy());
+            log.info("Strategy switched via API to: {}", request.strategy());
+            return Mono.just(ResponseEntity.ok(new SetStrategyResponse(request.strategy())));
         } catch (IllegalArgumentException e) {
-            return Mono.just(ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage())));
+            log.warn("Failed to switch strategy to: {}", request.strategy(), e);
+            return Mono.just(ResponseEntity.badRequest().build());
         }
     }
 }
