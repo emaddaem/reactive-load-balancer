@@ -19,11 +19,13 @@ import java.util.Set;
 public class LoadBalancerService {
 
     private final ServerRegistry serverRegistry;
+    private final CircuitBreakerService circuitBreakerService;
     private volatile LoadBalancerStrategy activeStrategy;
     private final Map<String, LoadBalancerStrategy> strategiesByName;
 
-    public LoadBalancerService(ServerRegistry serverRegistry, Map<String, LoadBalancerStrategy> strategies, LoadBalancerProperties properties) {
+    public LoadBalancerService(ServerRegistry serverRegistry, CircuitBreakerService circuitBreakerService, Map<String, LoadBalancerStrategy> strategies, LoadBalancerProperties properties) {
         this.serverRegistry = serverRegistry;
+        this.circuitBreakerService = circuitBreakerService;
         this.strategiesByName = new HashMap<>();
         strategies.values().forEach(s -> strategiesByName.put(s.getName(), s));
         String defaultName = properties.getAlgorithm().getDefaultAlgorithm();
@@ -71,7 +73,11 @@ public class LoadBalancerService {
     }
 
     public boolean deregisterServer(String id) {
-        return serverRegistry.deregister(id);
+        boolean removed = serverRegistry.deregister(id);
+        if (removed) {
+            circuitBreakerService.remove(id);
+        }
+        return removed;
     }
 
     public List<BackendServer> getAllServers() {

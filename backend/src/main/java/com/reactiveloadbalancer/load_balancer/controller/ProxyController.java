@@ -2,7 +2,11 @@ package com.reactiveloadbalancer.load_balancer.controller;
 
 import com.reactiveloadbalancer.load_balancer.config.WebClientConfig;
 import com.reactiveloadbalancer.load_balancer.model.BackendServer;
+import com.reactiveloadbalancer.load_balancer.service.CircuitBreakerService;
 import com.reactiveloadbalancer.load_balancer.service.LoadBalancerService;
+
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -24,6 +28,7 @@ public class ProxyController {
     private final LoadBalancerService loadBalancerService;
     private final WebClient webClient;
     private final WebClientConfig webClientConfig;
+    private final CircuitBreakerService circuitBreakerService;
 
     @RequestMapping("/**")
     public Mono<Void> proxy(ServerWebExchange exchange) {
@@ -73,10 +78,17 @@ public class ProxyController {
                     return response.writeWith(clientResponse.bodyToFlux(org.springframework.core.io.buffer.DataBuffer.class));
                 })
                 .timeout(webClientConfig.proxyTimeout())
+                .transformDeferred(CircuitBreakerOperator.of(circuitBreakerService.forServer(server.getId())))
+                .doOnError(CallNotPermittedException.class, ex -> {
+                    log.warn("[{}] Circuit breaker OPEN for server {} — returning 503", traceId, server.getUrl());
+                    response.setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
+                })
                 .doOnError(ex -> {
-                    log.error("[{}] Proxy error to {}: {}", traceId, server.getUrl(), ex.getMessage());
-                    server.recordFailedRequest();
-                    response.setStatusCode(HttpStatus.BAD_GATEWAY);
+                    if (!(ex instanceof CallNotPermittedException)) {
+                        log.error("[{}] Proxy error to {}: {}", traceId, server.getUrl(), ex.getMessage());
+                        server.recordFailedRequest();
+                        response.setStatusCode(HttpStatus.BAD_GATEWAY);
+                    }
                 })
                 .doFinally(signal -> server.decrementConnections())
                 .onErrorResume(ex -> response.setComplete());
