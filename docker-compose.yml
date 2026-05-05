@@ -1,0 +1,92 @@
+services:
+
+  # Demo backend servers
+  server1:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./demo-servers/server1/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  server2:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./demo-servers/server2/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  server3:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./demo-servers/server3/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  # Load balancer
+  load-balancer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      LOADBALANCER_HEALTH_CHECK_INTERVAL: 10000
+      LOADBALANCER_HEALTH_CHECK_TIMEOUT: 3000
+      LOADBALANCER_FAILURE_THRESHOLD: 3
+      LOADBALANCER_PROXY_TIMEOUT: 5000
+      LOADBALANCER_ALGORITHM_DEFAULT_ALGORITHM: ROUND_ROBIN
+    depends_on:
+      server1:
+        condition: service_healthy
+      server2:
+        condition: service_healthy
+      server3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Init container: registers the 3 backends once the LB is up
+  init-servers:
+    image: alpine:3.20
+    depends_on:
+      load-balancer:
+        condition: service_healthy
+    restart: "no"
+    command: >
+      sh -c "
+        apk add --no-cache curl -q &&
+        curl -sf -X POST http://load-balancer:8080/api/servers \
+          -H 'Content-Type: application/json' \
+          -d '{\"url\":\"http://server1\",\"weight\":1,\"description\":\"Demo Backend 1\"}' &&
+        curl -sf -X POST http://load-balancer:8080/api/servers \
+          -H 'Content-Type: application/json' \
+          -d '{\"url\":\"http://server2\",\"weight\":1,\"description\":\"Demo Backend 2\"}' &&
+        curl -sf -X POST http://load-balancer:8080/api/servers \
+          -H 'Content-Type: application/json' \
+          -d '{\"url\":\"http://server3\",\"weight\":1,\"description\":\"Demo Backend 3\"}' &&
+        echo 'All 3 backends registered.'
+      "
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      load-balancer:
+        condition: service_healthy
