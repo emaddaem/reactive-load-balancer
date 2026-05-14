@@ -1,15 +1,21 @@
 package com.reactiveloadbalancer.load_balancer.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @Slf4j
 public class BackendServer {
 
@@ -23,17 +29,21 @@ public class BackendServer {
     @Builder.Default
     private volatile boolean healthy = true;
     
+    @JsonIgnore
     @Builder.Default
     private AtomicInteger activeConnections = new AtomicInteger(0);
 
     private volatile LocalDateTime lastHealthCheck;
     
+    @JsonIgnore
     @Builder.Default
     private AtomicInteger consecutiveFailures = new AtomicInteger(0);
     
+    @JsonIgnore
     @Builder.Default
     private AtomicLong totalRequests = new AtomicLong(0);
     
+    @JsonIgnore
     @Builder.Default
     private AtomicLong failedRequests = new AtomicLong(0);
     
